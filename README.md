@@ -47,40 +47,40 @@ BidBolt connects freight buyers who need a shipment moved with suppliers who can
 
 ## Screenshots
 
-Screenshots are stored under [`docs/images/`](docs/images/). Replace these examples with updated captures as the UI changes.
+Screenshots are stored under [`docs/images/`](docs/images/). Each caption describes the screen’s purpose in the buyer, supplier, admin or developer workflow.
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/images/145024.png" alt="BidBolt landing page and sign-in" width="100%"><br><sub>Landing page and sign-in</sub></td>
-    <td width="50%"><img src="docs/images/145034.png" alt="Create buyer or supplier account" width="100%"><br><sub>Account creation</sub></td>
+    <td width="50%"><img src="docs/images/145024.png" alt="BidBolt landing page and sign-in" width="100%"><br><strong>Landing page and sign-in</strong><br><sub>Entry point for existing users. The top navigation offers sign-in, account creation and a separate administrator entry.</sub></td>
+    <td width="50%"><img src="docs/images/145034.png" alt="Create buyer or supplier account" width="100%"><br><strong>Create an account</strong><br><sub>Signup collects identity and password, then assigns the account a buyer or supplier role. Public signup cannot grant administrator privileges.</sub></td>
   </tr>
   <tr>
-    <td><img src="docs/images/145043.png" alt="Choose buyer or supplier account type" width="100%"><br><sub>Role selection</sub></td>
-    <td><img src="docs/images/145054.png" alt="Senior administrator sign-in" width="100%"><br><sub>Admin sign-in</sub></td>
+    <td><img src="docs/images/145043.png" alt="Choose buyer or supplier account type" width="100%"><br><strong>Choose account type</strong><br><sub>The role choice determines which dashboard and role-protected API operations the account can use.</sub></td>
+    <td><img src="docs/images/145054.png" alt="Senior administrator sign-in" width="100%"><br><strong>Admin sign-in</strong><br><sub>Separate, restricted entry for the senior administrator and marketplace-wide oversight.</sub></td>
   </tr>
   <tr>
-    <td><img src="docs/images/145304.png" alt="Create a freight RFQ with categories" width="100%"><br><sub>RFQ details and freight categories</sub></td>
-    <td><img src="docs/images/145317.png" alt="RFQ schedule and auction settings" width="100%"><br><sub>Schedule, extensions and publishing</sub></td>
+    <td><img src="docs/images/145304.png" alt="Create a freight RFQ with categories" width="100%"><br><strong>Describe the shipment</strong><br><sub>The buyer enters the lane, chooses transport modes and optional service requirements. These category selections power supplier-side filtering.</sub></td>
+    <td><img src="docs/images/145317.png" alt="RFQ schedule and auction settings" width="100%"><br><strong>Set auction rules</strong><br><sub>Remarks give suppliers context. Start, initial close, forced close, trigger window and extension policy define the reverse-auction schedule.</sub></td>
   </tr>
   <tr>
-    <td><img src="docs/images/145339.png" alt="Buyer RFQ list and filters" width="100%"><br><sub>RFQ directory and filters</sub></td>
-    <td><img src="docs/images/145416.png" alt="Buyer account profile and activity" width="100%"><br><sub>Account profile and activity</sub></td>
+    <td><img src="docs/images/145339.png" alt="Buyer RFQ list and filters" width="100%"><br><strong>RFQ list and filters</strong><br><sub>Search by lane, dates, transport, service and status; quick filters narrow the list to auctions with bids, remarks or an approaching close.</sub></td>
+    <td><img src="docs/images/145416.png" alt="Buyer account profile and activity" width="100%"><br><strong>Account and activity</strong><br><sub>Shows the signed-in person’s profile and history. Buyer history includes RFQs created by that buyer.</sub></td>
   </tr>
   <tr>
-    <td><img src="docs/images/145131.png" alt="Admin analytics dashboard" width="100%"><br><sub>Admin analytics</sub></td>
-    <td><img src="docs/images/145145.png" alt="Admin user directory" width="100%"><br><sub>Account directory</sub></td>
+    <td><img src="docs/images/145131.png" alt="Admin analytics dashboard" width="100%"><br><strong>Admin overview</strong><br><sub>Summarizes accounts, buyers, suppliers, RFQs, accepted quotes and auction status with activity visualizations.</sub></td>
+    <td><img src="docs/images/145145.png" alt="Admin user directory" width="100%"><br><strong>User directory</strong><br><sub>Admins can search and filter account records, paginate results, and open a user’s role-specific activity history.</sub></td>
   </tr>
   <tr>
-    <td><img src="docs/images/145603.png" alt="Swagger API documentation overview" width="100%"><br><sub>Interactive API reference</sub></td>
-    <td><img src="docs/images/145611.png" alt="OAuth2 authorization dialog" width="100%"><br><sub>API authorization flow</sub></td>
+    <td><img src="docs/images/145603.png" alt="Swagger API documentation overview" width="100%"><br><strong>FastAPI Swagger UI</strong><br><sub>Open `/docs` to explore the generated OpenAPI contract: request fields, validation rules, response schemas, status codes and endpoint groups.</sub></td>
+    <td><img src="docs/images/145611.png" alt="OAuth2 authorization dialog" width="100%"><br><strong>Authorize API calls</strong><br><sub>The Swagger authorization dialog requests a normal account’s username and password at `/api/auth/token`, then sends the bearer token for protected requests.</sub></td>
   </tr>
   <tr>
-    <td><img src="docs/images/145625.png" alt="Buyer and supplier API groups" width="100%"><br><sub>Buyer and supplier endpoints</sub></td>
-    <td><img src="docs/images/145634.png" alt="Admin and RFQ API groups" width="100%"><br><sub>Admin and RFQ endpoints</sub></td>
+    <td><img src="docs/images/145625.png" alt="Buyer and supplier API groups" width="100%"><br><strong>Buyer and supplier API groups</strong><br><sub>Profile, activity and analytics endpoints are scoped to the authenticated role; supplier capability updates use `PUT`.</sub></td>
+    <td><img src="docs/images/145634.png" alt="Admin and RFQ API groups" width="100%"><br><strong>Admin and RFQ API groups</strong><br><sub>Admin routes expose protected directory/analytics operations. RFQ routes create auctions, browse/filter requests and submit supplier bids.</sub></td>
   </tr>
   <tr>
-    <td><img src="docs/images/070613.png" alt="Earlier buyer dashboard preview" width="100%"><br><sub>Earlier dashboard preview</sub></td>
-    <td><img src="docs/images/145312.png" alt="RFQ form detail" width="100%"><br><sub>RFQ form detail</sub></td>
+    <td><img src="docs/images/070613.png" alt="Earlier buyer dashboard preview" width="100%"><br><strong>Earlier buyer dashboard</strong><br><sub>A historical preview of the buyer’s active RFQs and close-time information.</sub></td>
+    <td><img src="docs/images/145312.png" alt="RFQ form detail" width="100%"><br><strong>Form detail capture</strong><br><sub>A small supplemental crop from the RFQ creation flow.</sub></td>
   </tr>
 </table>
 
@@ -113,6 +113,45 @@ Screenshots are stored under [`docs/images/`](docs/images/). Replace these examp
 | Authentication | Signed JWT, Argon2 password hashing | Identify users and verify passwords |
 | Containers | Docker and Compose | Package the app and run the local multi-container topology |
 | Edge routing | Nginx | HTTP/TLS termination, shared write-rate limiting, round-robin upstream |
+
+## System architecture: shared sessions and round-robin
+
+```mermaid
+flowchart LR
+    Browser[Browser / Swagger client] -->|HTTPS request| Proxy[Nginx reverse proxy]
+    Proxy -->|round robin| A[FastAPI app 1]
+    Proxy -->|round robin| B[FastAPI app 2]
+    A --> DB[(Shared PostgreSQL)]
+    B --> DB
+    A -. checks session sid .-> DB
+    B -. checks session sid .-> DB
+    DB --- Users[Users, sessions, RFQs, bids, activity]
+```
+
+**Round robin** is Nginx’s default upstream distribution policy when no alternative method is configured. For each upstream request it selects the next available app replica; health failure settings let Nginx avoid an unavailable peer after repeated failures. Both containers run the same image and configuration. The containers don’t keep the authoritative user, auction or login state locally.
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant N as Nginx
+    participant A as App replica A
+    participant B as App replica B
+    participant D as Shared PostgreSQL
+    U->>N: Sign in
+    N->>A: Forward request (or B on next request)
+    A->>D: Verify password; create user_sessions row
+    A-->>U: Signed JWT (sid) + HttpOnly cookie
+    U->>N: Protected request with token
+    N->>B: Forward to another replica
+    B->>D: Validate sid is active for this user
+    D-->>B: Session active
+    B-->>U: Role-authorized response
+    U->>N: Logout
+    N->>A: Forward logout
+    A->>D: Set revoked_at for session
+```
+
+The database is the **shared session store**: a login creates a session row, every authenticated replica checks it, and logout revokes it. This avoids sticky sessions and means a request can move between replicas without logging the user out. PostgreSQL also stores the RFQs, bids and activity ledger, with a Docker named volume for local Compose persistence. The current Compose design places Nginx, both app containers and PostgreSQL on one host, so it provides app-process redundancy rather than host-level high availability.
 
 ## Security concepts
 
@@ -165,17 +204,85 @@ Important relationships and safeguards:
 
 ## API overview
 
-Interactive documentation is available at `/docs`; the OpenAPI schema is at `/openapi.json`.
+Interactive documentation is available at `/docs`; the machine-readable OpenAPI schema is at `/openapi.json`. FastAPI builds both from route declarations, Pydantic request/response models and dependency metadata. This makes the docs executable: expand an operation, inspect its parameters and schema, choose **Try it out**, provide values, then execute it and inspect the status, headers and response body.
+
+### Reading the developer docs
+
+- **Tags** group operations by domain: `authentication`, `buyers`, `suppliers`, `admin` and `rfqs`.
+- **HTTP methods** show intent: `GET` reads, `POST` creates or submits, and `PUT` replaces the signed-in supplier’s capabilities.
+- **Path parameters** identify a resource, such as `{rfq_id}`. **Query parameters** control pagination and filtering.
+- **Request body schemas** list required and optional fields and validation limits. Invalid input returns `422` with field details.
+- **Response schemas** show the documented shape and protect private model fields from being serialized accidentally.
+- **Lock icons** indicate protected operations. Use the Swagger **Authorize** dialog with a regular buyer/supplier account to exercise bearer-authenticated endpoints. Admin actions require a separately provisioned senior-admin account.
+- `/api/auth/token` follows the OAuth2 password form: Swagger submits `username` and `password` as form fields, not JSON. `/api/auth/admin/token` is the distinct admin login endpoint.
+
+### Endpoint reference
 
 | Group | Endpoints | Access |
 | --- | --- | --- |
-| Authentication | `POST /api/auth/register`, `/api/auth/token`, `/api/auth/admin/token`, `/api/auth/logout`; `GET /api/auth/me` | Public login/signup; authenticated profile/logout |
-| RFQs | `POST /api/rfqs`, `GET /api/rfqs`, `GET /api/rfqs/{rfq_id}`, `POST /api/rfqs/{rfq_id}/bids` | Buyer creates; authorized users browse; supplier bids |
-| Buyers | `GET /api/buyers/me`, `/me/activity`, `/me/analytics` | Signed-in buyer |
-| Suppliers | `GET /api/suppliers/me`, `/me/activity`, `/me/analytics`; `PUT /api/suppliers/me/capabilities` | Signed-in supplier |
-| Admin | `GET /api/admin/users`, `/buyers/{buyer_id}`, `/suppliers/{supplier_id}`, `/analytics` | Senior administrator |
+| Method and path | Purpose | Access / result |
+| --- | --- | --- |
+| `POST /api/auth/register` | Create buyer or supplier | Public; returns `UserPublic`, never a password hash |
+| `POST /api/auth/token` | Sign in a buyer/supplier | OAuth2 form; returns bearer token and sets session cookie |
+| `POST /api/auth/admin/token` | Sign in the senior administrator | Separate admin authentication |
+| `POST /api/auth/logout` · `GET /api/auth/me` | Revoke session · inspect current account | Logout revokes the shared session; `/me` requires authentication |
+| `POST /api/rfqs` | Publish a freight RFQ | Buyer only; server generates the reference ID |
+| `GET /api/rfqs` | Browse RFQs | Authenticated; filters and pagination below |
+| `GET /api/rfqs/{rfq_id}` | View RFQ and permitted bid details | Buyer sees all bids; supplier sees own prices and public progress |
+| `POST /api/rfqs/{rfq_id}/bids` | Submit a quote | Supplier only; idempotency key required |
+| `GET /api/buyers/me`, `/activity`, `/analytics` | Buyer profile, RFQ history and metrics | Signed-in buyer; data scoped to that buyer |
+| `GET /api/suppliers/me`, `/activity`, `/analytics` | Supplier profile, quote history and metrics | Signed-in supplier; data scoped to that supplier |
+| `PUT /api/suppliers/me/capabilities` | Save transport modes and services | Signed-in supplier |
+| `GET /api/admin/users`, `/buyers/{buyer_id}`, `/suppliers/{supplier_id}`, `/analytics` | Search directory, inspect activity and marketplace metrics | Senior administrator only |
 
-Paginated endpoints return page metadata, total counts and `has_more`. Admin buyer/supplier detail endpoints return distinct role-specific data shapes.
+### RFQ list filters and pagination
+
+`GET /api/rfqs` accepts `page` (starts at 1), `page_size` (1–100), `transport_mode`, `service`, `origin`, `destination`, `pickup_from`, `pickup_to`, `status`, `matching_only`, `has_bids`, `has_remarks` and `closing_soon`. Supplier-only `matching_only=true` compares RFQ categories against the signed-in supplier’s saved capabilities. Responses include `items`, `total`, `page`, `page_size` and `has_more`.
+
+Example:
+
+```http
+GET /api/rfqs?transport_mode=road&origin=Mumbai&status=active&page=1&page_size=10
+Authorization: Bearer <access-token>
+```
+
+### Request and response examples
+
+The following shortened payload shows the shape expected for RFQ creation. Timestamps must include a timezone; enum values and rules are listed in Swagger.
+
+```json
+{
+  "name": "Mumbai to Pune components",
+  "remarks": "Two pallets; include pickup and delivery charges.",
+  "origin": "Mumbai, India",
+  "destination": "Pune, India",
+  "transport_modes": ["road"],
+  "services": ["ltl"],
+  "bid_start_at": "2026-12-01T09:00:00Z",
+  "initial_close_at": "2026-12-02T09:00:00Z",
+  "forced_close_at": "2026-12-02T12:00:00Z",
+  "pickup_service_date": "2026-12-05",
+  "trigger_window_minutes": 10,
+  "extension_duration_minutes": 5,
+  "trigger_mode": "l1_change"
+}
+```
+
+Bid submissions provide component charges rather than a client-calculated total. The server calculates `comparison_total`, validates the auction state, applies ranking and extension rules, then returns the accepted quote and rank information allowed to that caller.
+
+```json
+{
+  "idempotency_key": "supplier-rfq-try-0001",
+  "carrier_name": "Example Freight Co",
+  "freight_charges": "12500.00",
+  "origin_charges": "500.00",
+  "destination_charges": "750.00",
+  "transit_time_hours": 18,
+  "quote_valid_until": "2026-12-03T09:00:00Z"
+}
+```
+
+Paginated account and activity endpoints use the same page metadata. Admin buyer/supplier detail endpoints return distinct role-specific response schemas rather than a generic record containing unrestricted data.
 
 ## Run locally
 
