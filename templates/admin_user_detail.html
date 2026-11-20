@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ title }} · FreightFlow</title>
+  <link rel="stylesheet" href="/static/css/main.css?v=2">
+</head>
+<body>
+  <header class="topbar"><a class="brand" href="/">Freight<span>Flow</span></a><div class="topbar-actions"><span class="user-chip">{{ admin.username }} · senior admin</span><a class="button button-quiet" href="/admin/users">All users</a></div></header>
+  <main class="shell admin-shell">
+    <p class="eyebrow">USER RECORD · #{{ user.id }}</p><h1 class="admin-title">{{ user.username }}</h1>
+    <div class="card account-card admin-profile"><div><span>Email</span><strong>{{ user.email }}</strong></div><div><span>Account type</span><strong>{{ user.role|title }}</strong></div><div><span>Senior admin</span><strong>{{ "Yes" if user.is_admin else "No" }}</strong></div><div><span>Created</span><strong>{{ user.created_at }}</strong></div></div>
+    <h2>Account activity</h2>
+    <div class="account-history-list">{% for item in activity %}<article class="history-item"><div class="history-top"><strong>{{ item.action }} · {{ item.reference_id }}</strong><time>{{ item.occurred_at }}</time></div><p>{{ item.item_name }}</p><div class="history-meta"><span>{{ item.status }}</span>{% if item.amount is not none %}<strong>{{ item.amount }}</strong>{% endif %}</div></article>{% else %}<p class="muted">No activity recorded.</p>{% endfor %}</div>
+  </main>
+</body>
+</html>

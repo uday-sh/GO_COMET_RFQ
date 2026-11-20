@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ title }} · FreightFlow</title>
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+  <link rel="stylesheet" href="/static/css/main.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/">Freight<span>Flow</span></a>
+    <div class="topbar-actions"><nav id="auth-nav" class="auth-nav" aria-label="Account access"><button type="button" class="button auth-nav-btn" data-auth-tab="login" aria-pressed="true">Sign in</button><button type="button" class="button auth-nav-btn" data-auth-tab="register" aria-pressed="false">Create account</button><button type="button" class="button auth-nav-btn" data-auth-tab="admin" aria-pressed="false">Admin</button></nav><span id="user-chip" class="user-chip hidden"></span><a id="admin-users-link" class="button button-quiet hidden" href="/admin/users">Manage users</a><button id="account-btn" class="button button-quiet hidden">Account</button><button id="logout-btn" class="button button-quiet hidden">Sign out</button></div>
+  </header>
+  <main class="shell">
+    <section id="auth-panel" class="auth-grid">
+      <div class="hero-copy">
+        <p class="eyebrow">PROCUREMENT OPERATIONS</p>
+        <h1>Better freight decisions, made in real time.</h1>
+        <p class="lede">FreightFlow gives buyers a transparent RFQ workspace and suppliers a fair, time-boxed British reverse auction.</p>
+        <div class="hero-points"><div><strong>01</strong><span>Traceable bids and extensions</span></div><div><strong>02</strong><span>Deterministic L1 rankings</span></div><div><strong>03</strong><span>Forced-close protection</span></div></div>
+      </div>
+      <div class="card auth-card">
+        <form id="login-form" class="form-stack"><label>Email or username<input type="text" name="email" required autocomplete="username" placeholder="Email or username"></label><label>Password<input type="password" name="password" required autocomplete="current-password"></label><button class="button button-primary" type="submit">Enter workspace <span>→</span></button></form>
+        <form id="register-form" class="form-stack hidden"><label>Account type<select name="role"><option value="supplier">Supplier</option><option value="buyer">Buyer</option></select></label><label>Username<input name="username" required minlength="2" maxlength="50" autocomplete="username" placeholder="Your username"></label><label>Email<input type="email" name="email" required autocomplete="email"></label><label>Password (8+ characters)<input type="password" name="password" required minlength="8" maxlength="128" autocomplete="new-password"></label><p class="muted auth-note">Use a strong password where possible. If it does not meet the recommendation, you can choose to continue.</p><button class="button button-primary" type="submit">Create account <span>→</span></button></form>
+        <form id="admin-login-form" class="form-stack hidden"><label>Admin username or email<input type="text" name="username" required autocomplete="username" placeholder="Admin username or email"></label><label>Password<input type="password" name="password" required autocomplete="current-password"></label><p class="muted auth-note">Administrator sign-in is restricted to the senior admin account.</p><button class="button button-primary" type="submit">Sign in to admin <span>→</span></button></form>
+        <p id="auth-message" class="form-message"></p>
+      </div>
+    </section>
+
+    <section id="workspace" class="hidden">
+      <div id="dashboard-view">
+        <div class="workspace-heading"><div><p id="dashboard-eyebrow" class="eyebrow"></p><h1 id="dashboard-title"></h1><p id="dashboard-description" class="muted"></p></div><button id="new-rfq-btn" class="button button-primary hidden">+ New auction</button></div>
+        <div id="flash" class="flash hidden"></div>
+        <div id="auction-grid" class="auction-grid"></div>
+        <div id="empty-state" class="empty-state hidden"><div class="empty-icon">◌</div><h3 id="empty-title">No auctions yet</h3><p id="empty-description"></p></div>
+      </div>
+      <section id="account-view" class="account-view hidden"><p class="eyebrow">PROFILE</p><h1>Account</h1><p id="account-description" class="muted"></p><div class="card account-card"><div><span>Username</span><strong id="account-username"></strong></div><div><span>Email</span><strong id="account-email"></strong></div><div><span>Account type</span><strong id="account-role"></strong></div></div><div class="account-history"><h2>Past activity</h2><div id="account-history-list" class="account-history-list"></div><p id="account-history-empty" class="muted hidden"></p></div><button id="back-to-dashboard" class="button button-quiet">← Back to dashboard</button></section>
+    </section>
+
+    <dialog id="password-warning" class="password-dialog card" aria-labelledby="password-warning-title"><p class="eyebrow">PASSWORD CHECK</p><h2 id="password-warning-title">Choose a stronger password?</h2><p class="muted">A stronger password usually has 12+ characters with lowercase and uppercase letters, a number, and a symbol. You can still use your current password if you prefer.</p><div class="form-actions"><button type="button" class="button button-quiet" data-password-choice="change">Choose a stronger password</button><button type="button" class="button button-primary" data-password-choice="continue">Use this password</button></div></dialog>
+
+    <section id="rfq-panel" class="modal-wrap hidden"><div class="modal card"><button class="modal-close" data-close="rfq-panel">×</button><p class="eyebrow">BUYER WORKFLOW</p><h2>Create a British auction</h2><p class="muted">The auction ID is assigned automatically. All timestamps are stored in UTC; the forced close is an absolute cap.</p><form id="rfq-form" class="form-grid"><label class="full">Auction name<input name="name" placeholder="West region linehaul" required minlength="3" maxlength="160"></label><label class="full">Remarks for suppliers<textarea name="remarks" rows="4" maxlength="5000" placeholder="Explain the shipment, service expectations, bid requirements, or other context suppliers should know."></textarea></label><label>Bid starts<input type="datetime-local" name="bid_start_at" required></label><label>Initial close<input type="datetime-local" name="initial_close_at" required></label><label>Forced close<input type="datetime-local" name="forced_close_at" required></label><label>Pickup / service date<input type="date" name="pickup_service_date" required></label><label>Trigger window (minutes)<input type="number" name="trigger_window_minutes" value="10" min="1" max="1440" required></label><label>Extension duration (minutes)<input type="number" name="extension_duration_minutes" value="5" min="1" max="1440" required></label><label class="full">Extension trigger<select name="trigger_mode"><option value="bid_received">Any valid bid received</option><option value="rank_change">Any supplier rank change</option><option value="l1_change">L1 supplier changes</option></select></label><div class="form-actions full"><button type="button" class="button button-quiet" data-close="rfq-panel">Cancel</button><button class="button button-primary" type="submit">Publish auction</button></div></form></div></section>
+    <section id="detail-panel" class="modal-wrap hidden"><div class="modal card modal-wide"><button class="modal-close" data-close="detail-panel">×</button><div id="detail-content"></div></div></section>
+  </main>
+  <footer class="footer">FreightFlow · Enterprise RFQ & British reverse auction</footer>
+  <script src="/static/js/app.js?v=9"></script>
+</body>
+</html>
