@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ title }} · BidBolt</title>
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+  <link rel="stylesheet" href="/static/css/main.css?v=12">
+</head>
+<body class="app-page">
+  <div class="admin-layout">
+    {% include "partials/admin_sidebar.html" %}
+    <main class="admin-main">
+      <div class="page-heading"><div><p class="eyebrow">MARKETPLACE CONTROL</p><h1>Admin overview</h1><p class="muted">Live account, RFQ, and quotation activity across BidBolt.</p></div><a class="button button-primary" href="/admin/users">Explore users <span>→</span></a></div>
+      <section class="metric-grid admin-metrics">
+        <article class="metric-card"><span>Accounts</span><strong>{{ analytics.user_total }}</strong><small>{{ analytics.admin_total }} senior admins</small></article>
+        <article class="metric-card"><span>Buyers</span><strong>{{ analytics.buyer_total }}</strong><small>Registered sourcing teams</small></article>
+        <article class="metric-card"><span>Suppliers</span><strong>{{ analytics.supplier_total }}</strong><small>Freight providers</small></article>
+        <article class="metric-card"><span>RFQs</span><strong>{{ analytics.rfq_total }}</strong><small>{{ analytics.rfq_active }} currently active</small></article>
+        <article class="metric-card"><span>Accepted quotes</span><strong>{{ analytics.quote_total }}</strong><small>{{ analytics.rfq_closed }} closed RFQs</small></article>
+      </section>
+      <section class="analytics-grid">
+        <article class="card chart-card"><div class="chart-heading"><div><p class="eyebrow">LAST 14 DAYS</p><h2>Marketplace activity</h2></div><span class="chart-legend"><i></i>RFQs + quotes</span></div>
+          <div class="spark-chart" role="img" aria-label="Daily RFQ and quotation activity over the last 14 days">
+            {% for point in analytics.activity_trend %}{% set height = ((point.value * 100 / max_activity)|round(0, 'ceil')) if max_activity else 4 %}<span title="{{ point.label }}: {{ point.value }} activities" style="height: {{ height }}%"></span>{% endfor %}
+          </div>
+          <div class="chart-axis"><span>{{ analytics.activity_trend[0].label if analytics.activity_trend else "" }}</span><span>Today</span></div>
+        </article>
+        <article class="card chart-card"><div class="chart-heading"><div><p class="eyebrow">AUCTION HEALTH</p><h2>RFQ status</h2></div></div>
+          <div class="bar-chart">{% for point in analytics.status_breakdown %}{% set width = ((point.value * 100 / max_status)|round(0, 'ceil')) if max_status else 0 %}<div class="bar-row"><div><span>{{ point.label }}</span><strong>{{ point.value }}</strong></div><div class="bar-track"><i style="width: {{ width }}%"></i></div></div>{% endfor %}</div>
+        </article>
+      </section>
+      <section class="card admin-shortcuts"><div><p class="eyebrow">ADMIN TOOLS</p><h2>Account directory</h2><p class="muted">Search, filter, and review activity for buyer and supplier accounts.</p></div><a class="button button-quiet" href="/admin/users">Open directory →</a></section>
+    </main>
+  </div>
+</body>
+</html>

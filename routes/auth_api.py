@@ -10,8 +10,8 @@ import models
 from auth import CurrentUser, create_access_token, hash_password, verify_password
 from config import settings
 from database import get_db
-from schemas import AccountActivityItem, Token, UserCreate, UserPublic
-from services.user_activity import get_account_activity
+from schemas import ActivityPage, Token, UserCreate, UserPublic
+from services.user_activity import count_account_activity, get_account_activity
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 
@@ -96,13 +96,17 @@ async def me(current_user: CurrentUser):
     return current_user
 
 
-@router.get("/activity", response_model=list[AccountActivityItem], include_in_schema=False)
+@router.get("/activity", response_model=ActivityPage, include_in_schema=False)
 async def account_activity(
     current_user: CurrentUser,
     db: Annotated[AsyncSession, Depends(get_db)],
-    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 20,
 ):
     role = current_user.role
     user_id = current_user.id
     await db.rollback()
-    return await get_account_activity(db, user_id, role, limit)
+    total = await count_account_activity(db, user_id, role)
+    offset = (page - 1) * page_size
+    items = await get_account_activity(db, user_id, role, page_size, offset)
+    return ActivityPage(items=items, total=total, page=page, page_size=page_size, has_more=offset + len(items) < total)

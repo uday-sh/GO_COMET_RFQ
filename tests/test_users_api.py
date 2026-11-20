@@ -14,17 +14,23 @@ async def test_landing_page_has_header_buttons_for_each_access_flow(client):
     assert 'id="login-form"' in page.text
     assert 'id="register-form"' in page.text
     assert 'id="admin-login-form"' in page.text
+    assert 'id="overview-view"' in page.text
+    assert 'id="analytics-view"' in page.text
+    assert 'id="rfq-pagination"' in page.text
+    assert 'name="has_bids"' in page.text and 'name="closing_soon"' in page.text
 
 
 @pytest.mark.anyio
 async def test_browser_auth_token_is_tab_scoped(client):
     script = await client.get("/static/js/app.js?v=9")
     assert script.status_code == 200
-    assert "sessionStorage.getItem('rfq_token')" in script.text
-    assert "sessionStorage.setItem('rfq_token'" in script.text
-    assert "localStorage.removeItem('rfq_token')" in script.text
-    assert "localStorage.getItem('rfq_token')" not in script.text
-    assert "localStorage.setItem('rfq_token'" not in script.text
+    api_utils = await client.get("/static/js/utils/api.js")
+    assert api_utils.status_code == 200
+    assert 'sessionStorage.getItem("rfq_token")' in api_utils.text
+    assert 'sessionStorage.setItem("rfq_token"' in script.text
+    assert 'localStorage.removeItem("rfq_token")' in api_utils.text
+    assert "localStorage.getItem(" not in api_utils.text
+    assert "localStorage.setItem(" not in api_utils.text
 
 
 @pytest.mark.anyio
@@ -43,6 +49,7 @@ async def test_buyer_and_supplier_profiles_are_self_scoped_and_html_is_rendered(
     denied_page = await client.get("/admin/users")
     assert denied_page.status_code == 403
     assert denied_page.headers["content-type"].startswith("text/html")
+    assert denied_page.headers["cache-control"] == "no-store, private"
     assert "Access denied" in denied_page.text
 
 
@@ -84,7 +91,8 @@ async def test_senior_admin_can_list_and_review_users_without_password_fields(cl
     admin_page = await client.get("/admin/users")
     assert admin_page.status_code == 200
     assert admin_page.headers["content-type"].startswith("text/html")
-    assert "User administration" in admin_page.text
+    assert admin_page.headers["cache-control"] == "no-store, private"
+    assert "User directory" in admin_page.text
 
     openapi = (await client.get("/openapi.json")).json()
     assert "/api/buyers/me" in openapi["paths"]

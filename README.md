@@ -1,28 +1,38 @@
-# FreightFlow RFQ & British Reverse Auction
+# BidBolt — Better routes. Better bids. Better business.
 
-FreightFlow is a FastAPI + async SQLAlchemy application for buyer-created RFQs and supplier-led British reverse auctions. The canonical comparison amount is `freight_charges + origin_charges + destination_charges`, stored as `NUMERIC(18,2)`. Ranking uses each supplier's best accepted quote, then earliest server-side acceptance time, then bid ID for deterministic ties.
+BidBolt is a buyer and supplier freight marketplace built with FastAPI, async SQLAlchemy, Jinja, and browser JavaScript. Buyers publish RFQs and suppliers find work that matches their routes and service capabilities, then compete in a British reverse auction. The canonical comparison amount is `freight_charges + origin_charges + destination_charges`, stored as `NUMERIC(18,2)`. Ranking uses each supplier's best accepted quote, then earliest server-side acceptance time, then bid ID for deterministic ties.
 
 ## Architecture
 
-The current deployment is a modular monolith: authentication/identity and RFQ/auction are separate API domains, while the auction write path stays in one process and one database transaction. Bid acceptance, ranking, deadline validation, extensions, and audit events must agree atomically, so splitting those writes into networked services would introduce failure and consistency cases without a current scaling need. If independent scaling becomes necessary, notifications and reporting are the first good microservice candidates because they can consume committed auction events without participating in bid acceptance.
+The application is a modular monolith. `main.py` only creates the FastAPI app; `core/app_factory.py` configures it, and HTTP error and security behavior live under `core/`. All endpoint paths and handlers live under `routes/`, grouped by authentication, RFQs, buyer/supplier APIs, administration, and system pages. Business workflows and persistence remain in focused modules. Browser helpers live in `static/js/utils/`, with the UI entry point in `static/js/app.js`.
 
 ```mermaid
 flowchart LR
-  Browser[Responsive Jinja + vanilla JS UI] --> API[FastAPI API]
-  API --> Identity[Identity module: signup, login, JWT]
-  API --> Auction[RFQ + auction module]
-  Auction --> Workflow[Transactional auction workflow]
-  Workflow --> DB[(PostgreSQL / SQLite dev DB)]
-  Workflow --> Audit[Bid, extension, and activity ledger]
-  Workflow -. future committed events .-> Notify[Optional notification service]
+  Browser[BidBolt UI: Jinja + JavaScript] --> API[FastAPI app]
+  API --> Routes[routes/ endpoint modules]
+  Routes --> Identity[Authentication and account APIs]
+  Routes --> Auctions[RFQ and auction workflows]
+  Auctions --> DB[(PostgreSQL / SQLite dev DB)]
+  Auctions --> Audit[Bid, extension, and activity ledger]
+  Auctions -. future committed events .-> Notify[Optional notification service]
 ```
 
 The database is the source of truth. A bid transaction locks the RFQ row where the database supports row locks, checks the database/server deadline, validates a strictly lower supplier quote, recalculates rankings, applies the configured extension if eligible, and writes audit records before commit. `idempotency_key` is unique per supplier/RFQ so safe client retries do not create duplicate submissions.
 
+## Freight categories and marketplace filters
+
+Suppliers save supported transport modes and services in their account profile. The current modes are road, air, ocean, rail, multimodal, and courier. Services include full and less-than-truck/container loads, reefer, hazmat, oversized freight, express, customs, warehousing, and last mile.
+
+Buyers choose one or more transport modes and optional services when creating an RFQ, and can include origin, destination, pickup date, and remarks. Buyers and suppliers can filter their RFQ lists by mode, service, origin, destination, pickup-date range, status, accepted quotes, notes, and auctions closing within 24 hours. Suppliers can also match saved capabilities. Bid detail filters show each supplier’s current best quote and the top three ranks. Selected filters apply immediately and appear as active chips. Admins can filter and inspect auctions and bids across the marketplace.
+
+## Dashboards and analytics
+
+Buyer and supplier workspaces include a role-aware sidebar, overview metrics, 14-day activity charts, paginated RFQ lists, paginated quote history, and account settings. Buyer analytics count only that buyer’s RFQs and received quotes. Supplier analytics use only that supplier’s quotations and leading ranks. The senior-admin dashboard shows global account, RFQ, and quote metrics, with paginated user and auction directories and per-account activity views.
+
 ## Business rules
 
 - Auction IDs are assigned by the server from the database sequence; buyers enter the auction name, schedule, and supplier-facing remarks, not an ID.
-- Buyer remarks are stored with the RFQ and shown in both buyer and supplier detail views. Account history records buyer RFQ creation and supplier quotation submissions.
+- Buyer remarks are stored with the RFQ and shown in buyer and supplier detail views. Account history records buyer RFQ creation and supplier quotation submissions.
 - Buyer lists and detail views are scoped to RFQs owned by that buyer. Suppliers can browse RFQs and see only their own quote amounts.
 - All API timestamps must include a timezone and are normalized to UTC.
 - An auction starts at `bid_start_at`, naturally closes at `current_close_at`, and becomes `force_closed` at `forced_close_at`. The forced deadline is absolute.
@@ -36,7 +46,7 @@ The database is the source of truth. A bid transaction locks the RFQ row where t
 Requires Python 3.12+ and [uv](https://docs.astral.sh/uv/).
 
 ```powershell
-copy .env.example .env
+Copy-Item .env.example .env
 # Set SECRET_KEY in .env to a generated value, for example:
 python -c "import secrets; print(secrets.token_urlsafe(48))"
 uv sync
@@ -44,13 +54,13 @@ uv run alembic upgrade head
 uv run fastapi dev main.py
 ```
 
-Open http://localhost:8000. Public signup lets users choose a buyer or supplier account. Weak-password choices prompt a recommendation modal but remain allowed. Buyer dashboards show only RFQs created by that buyer; supplier dashboards show the open RFQ marketplace. Both roles have a profile/account page.
+Open http://localhost:8000. Public signup lets users choose a buyer or supplier account. Weak-password choices prompt a recommendation modal but remain allowed. Buyer dashboards show only RFQs created by that buyer; supplier dashboards show the filtered RFQ marketplace. Both roles have an account page, analytics, and paginated activity history.
 
 ## User data and senior administration
 
-Create or promote the senior administrator with `uv run python scripts/create_admin.py`. The script prompts for username, email, and a hidden password, then stores only an Argon2 password hash. The administrator can browse the server-rendered directory at `/admin/users` and inspect a user’s profile and account activity. Browser requests without admin access receive a Jinja HTML error page.
+Create or promote the senior administrator with `uv run python scripts/create_admin.py`. The script prompts for username, email, and a hidden password, then stores only an Argon2 password hash. The admin portal at `/admin` includes marketplace analytics, auction and bid oversight at `/admin/auctions`, and a searchable, filterable account directory at `/admin/users`. User and quote history pages are paginated. Browser requests without admin access receive a Jinja HTML error page.
 
-The OpenAPI docs group role-specific account APIs under **Buyers**, **Suppliers**, and **Admin**. Buyers use `GET /api/buyers/me` and `/api/buyers/me/activity`; suppliers use `GET /api/suppliers/me` and `/api/suppliers/me/activity`. Admin-only endpoints are `GET /api/admin/users`, `/api/admin/buyers/{id}`, and `/api/admin/suppliers/{id}`. Buyer, supplier, and admin detail responses have separate schemas; none include password hashes. Buyer and supplier endpoints are scoped to the signed-in person, and admin endpoints require the senior-admin flag.
+The OpenAPI docs group role-specific account APIs under **Buyers**, **Suppliers**, and **Admin**. Buyers use `GET /api/buyers/me`, `/api/buyers/me/activity`, and `/api/buyers/me/analytics`; suppliers use `GET /api/suppliers/me`, `/api/suppliers/me/activity`, and `/api/suppliers/me/analytics`, and can save capabilities with `PUT /api/suppliers/me/capabilities`. Activity endpoints and RFQ bid details accept page parameters and return totals and `has_more`. Admin-only endpoints include `GET /api/admin/analytics`, `/api/admin/users`, `/api/admin/buyers/{id}`, and `/api/admin/suppliers/{id}`. Buyer, supplier, and admin detail responses have separate schemas; none include password hashes. Buyer and supplier endpoints are scoped to the signed-in person, and admin endpoints require the senior-admin flag.
 
 ## Docker
 
@@ -73,4 +83,4 @@ Supabase Free is a practical PostgreSQL option for a small demo: the current pub
 uv run pytest -q
 ```
 
-The test suite uses a temporary SQLite database, API authorization checks, monetary precision, rank/tie behavior, trigger modes, forced-close rules, idempotent retries, and concurrent submission coverage.
+The test suite uses a temporary SQLite database and covers API authorization, freight capability updates and filters, bid filters and pagination, role-scoped analytics, admin directory and auction oversight, monetary precision, rank/tie behavior, trigger modes, forced-close rules, idempotent retries, and concurrent submission coverage.

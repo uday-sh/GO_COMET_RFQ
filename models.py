@@ -26,6 +26,8 @@ class User(Base):
 
     rfqs: Mapped[list[RFQ]] = relationship(back_populates="buyer", cascade="all, delete-orphan")
     bids: Mapped[list[Bid]] = relationship(back_populates="supplier")
+    transport_modes: Mapped[list[SupplierTransportMode]] = relationship(back_populates="supplier", cascade="all, delete-orphan", lazy="selectin")
+    services: Mapped[list[SupplierService]] = relationship(back_populates="supplier", cascade="all, delete-orphan", lazy="selectin")
 
     __table_args__ = (CheckConstraint("role IN ('buyer', 'supplier')", name="ck_users_role"),)
 
@@ -37,6 +39,8 @@ class RFQ(Base):
     reference_id: Mapped[str] = mapped_column(String(40), unique=True, nullable=False)
     name: Mapped[str] = mapped_column(String(160), nullable=False)
     remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
+    origin: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    destination: Mapped[str | None] = mapped_column(String(160), nullable=True)
     buyer_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     bid_start_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     initial_close_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -54,6 +58,8 @@ class RFQ(Base):
     bids: Mapped[list[Bid]] = relationship(back_populates="rfq", cascade="all, delete-orphan")
     extensions: Mapped[list[AuctionExtension]] = relationship(back_populates="rfq", cascade="all, delete-orphan")
     activities: Mapped[list[AuctionActivity]] = relationship(back_populates="rfq", cascade="all, delete-orphan")
+    transport_modes: Mapped[list[RFQTransportMode]] = relationship(back_populates="rfq", cascade="all, delete-orphan", lazy="selectin", order_by="RFQTransportMode.mode")
+    services: Mapped[list[RFQService]] = relationship(back_populates="rfq", cascade="all, delete-orphan", lazy="selectin", order_by="RFQService.service")
 
     __table_args__ = (
         CheckConstraint("bid_start_at < initial_close_at", name="ck_rfqs_start_before_initial_close"),
@@ -64,6 +70,46 @@ class RFQ(Base):
         CheckConstraint("trigger_mode IN ('bid_received', 'rank_change', 'l1_change')", name="ck_rfqs_trigger_mode"),
         CheckConstraint("status IN ('active', 'closed', 'force_closed')", name="ck_rfqs_status"),
     )
+
+
+class RFQTransportMode(Base):
+    __tablename__ = "rfq_transport_modes"
+
+    rfq_id: Mapped[int] = mapped_column(ForeignKey("rfqs.id", ondelete="CASCADE"), primary_key=True)
+    mode: Mapped[str] = mapped_column(String(30), primary_key=True)
+    rfq: Mapped[RFQ] = relationship(back_populates="transport_modes")
+
+    __table_args__ = (CheckConstraint("mode IN ('road', 'air', 'ocean', 'rail', 'multimodal', 'courier')", name="ck_rfq_transport_mode"),)
+
+
+class RFQService(Base):
+    __tablename__ = "rfq_services"
+
+    rfq_id: Mapped[int] = mapped_column(ForeignKey("rfqs.id", ondelete="CASCADE"), primary_key=True)
+    service: Mapped[str] = mapped_column(String(30), primary_key=True)
+    rfq: Mapped[RFQ] = relationship(back_populates="services")
+
+    __table_args__ = (CheckConstraint("service IN ('ftl', 'ltl', 'fcl', 'lcl', 'reefer', 'hazmat', 'oversized', 'express', 'customs', 'warehousing', 'last_mile')", name="ck_rfq_service"),)
+
+
+class SupplierTransportMode(Base):
+    __tablename__ = "supplier_transport_modes"
+
+    supplier_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    mode: Mapped[str] = mapped_column(String(30), primary_key=True)
+    supplier: Mapped[User] = relationship(back_populates="transport_modes")
+
+    __table_args__ = (CheckConstraint("mode IN ('road', 'air', 'ocean', 'rail', 'multimodal', 'courier')", name="ck_supplier_transport_mode"),)
+
+
+class SupplierService(Base):
+    __tablename__ = "supplier_services"
+
+    supplier_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    service: Mapped[str] = mapped_column(String(30), primary_key=True)
+    supplier: Mapped[User] = relationship(back_populates="services")
+
+    __table_args__ = (CheckConstraint("service IN ('ftl', 'ltl', 'fcl', 'lcl', 'reefer', 'hazmat', 'oversized', 'express', 'customs', 'warehousing', 'last_mile')", name="ck_supplier_service"),)
 
 
 class Bid(Base):

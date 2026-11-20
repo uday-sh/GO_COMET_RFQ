@@ -3,7 +3,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from tests.conftest import auth, register
+from tests.conftest import auth, promote_to_admin, register
 
 
 def schedule(start_offset=0, close_offset=30, forced_offset=60):
@@ -17,7 +17,18 @@ def schedule(start_offset=0, close_offset=30, forced_offset=60):
 
 
 async def create_rfq(client, token, mode="bid_received", **overrides):
-    body = {"name": "Northstar linehaul", "trigger_window_minutes": 10, "extension_duration_minutes": 5, "trigger_mode": mode, **schedule(-1, 30, 60), **overrides}
+    body = {
+        "name": "Northstar linehaul",
+        "origin": "Delhi",
+        "destination": "Mumbai",
+        "transport_modes": ["road"],
+        "services": [],
+        "trigger_window_minutes": 10,
+        "extension_duration_minutes": 5,
+        "trigger_mode": mode,
+        **schedule(-1, 30, 60),
+        **overrides,
+    }
     response = await client.post("/api/rfqs", json=body, headers=auth(token))
     assert response.status_code == 201, response.text
     return response.json()
@@ -137,8 +148,84 @@ async def test_supplier_bid_limit_applies_after_own_bid_privacy_filter(client):
     detail = await client.get(f"/api/rfqs/{rfq['id']}?bid_limit=1", headers=auth(trailing_supplier))
     assert detail.status_code == 200
     assert len(detail.json()["bids"]) == 1
+    assert detail.json()["current_lowest_bid"] is None
     assert detail.json()["bids"][0]["supplier_name"] == "supplier-bid-limit-own"
     assert detail.json()["bids"][0]["rank"] == 2
+    buyer_view = await client.get(f"/api/rfqs/{rfq['id']}", headers=auth(buyer))
+    assert buyer_view.status_code == 200
+    assert buyer_view.json()["current_lowest_bid"] == "65.00"
+    supplier_marketplace = await client.get("/api/rfqs", headers=auth(trailing_supplier))
+    assert supplier_marketplace.json()["items"][0]["current_lowest_bid"] is None
+
+
+@pytest.mark.anyio
+async def test_supplier_capabilities_and_marketplace_filters(client):
+    buyer = await register(client, "buyer-category-filter", "buyer")
+    supplier = await register(client, "supplier-category-filter")
+    supplier_without_capabilities = await register(client, "supplier-no-capabilities")
+
+    road_rfq = await create_rfq(
+        client,
+        buyer,
+        name="Delhi to Mumbai full truckload",
+        origin="Delhi",
+        destination="Mumbai",
+        transport_modes=["road"],
+        services=["ftl"],
+    )
+    air_rfq = await create_rfq(
+        client,
+        buyer,
+        name="Air express shipment",
+        origin="Pune",
+        destination="Chennai",
+        transport_modes=["air"],
+        services=["express"],
+    )
+
+    supplier_profile = await client.get("/api/suppliers/me", headers=auth(supplier))
+    assert supplier_profile.status_code == 200
+    assert supplier_profile.json()["transport_modes"] == []
+
+    saved = await client.put(
+        "/api/suppliers/me/capabilities",
+        json={"transport_modes": ["road"], "services": ["ftl"]},
+        headers=auth(supplier),
+    )
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["transport_modes"] == ["road"]
+    assert saved.json()["services"] == ["ftl"]
+
+    filtered = await client.get(
+        "/api/rfqs",
+        params={"transport_mode": "road", "service": "ftl", "origin": "del", "destination": "mum"},
+        headers=auth(supplier),
+    )
+    assert filtered.status_code == 200
+    assert [item["id"] for item in filtered.json()["items"]] == [road_rfq["id"]]
+
+    matches = await client.get("/api/rfqs?matching_only=true", headers=auth(supplier))
+    assert matches.status_code == 200
+    matched_ids = {item["id"] for item in matches.json()["items"]}
+    assert road_rfq["id"] in matched_ids
+    assert air_rfq["id"] not in matched_ids
+
+    no_matches = await client.get("/api/rfqs?matching_only=true", headers=auth(supplier_without_capabilities))
+    assert no_matches.status_code == 200 and no_matches.json()["items"] == []
+
+    reversed_dates = await client.get(
+        "/api/rfqs",
+        params={"pickup_from": "2027-12-31", "pickup_to": "2027-01-01"},
+        headers=auth(supplier),
+    )
+    assert reversed_dates.status_code == 422
+
+    buyer_cannot_set_capabilities = await client.put(
+        "/api/suppliers/me/capabilities",
+        json={"transport_modes": ["road"], "services": []},
+        headers=auth(buyer),
+    )
+    assert buyer_cannot_set_capabilities.status_code == 403
 
 
 @pytest.mark.anyio
@@ -182,12 +269,12 @@ async def test_account_activity_tracks_buyer_rfqs_and_supplier_bids(client):
     buyer = await register(client, "buyer-activity", "buyer")
     supplier = await register(client, "supplier-activity")
     empty_history = await client.get("/api/buyers/me/activity", headers=auth(buyer))
-    assert empty_history.status_code == 200 and empty_history.json() == []
+    assert empty_history.status_code == 200 and empty_history.json()["items"] == []
 
     rfq = await create_rfq(client, buyer, remarks="Deliver on weekdays; provide liftgate service.")
     immediate_history = await client.get("/api/buyers/me/activity", headers=auth(buyer))
     assert immediate_history.status_code == 200
-    assert immediate_history.json()[0]["auction_id"] == rfq["reference_id"]
+    assert immediate_history.json()["items"][0]["auction_id"] == rfq["reference_id"]
 
     supplier_detail = await client.get(f"/api/rfqs/{rfq['id']}", headers=auth(supplier))
     assert supplier_detail.status_code == 200
@@ -195,12 +282,128 @@ async def test_account_activity_tracks_buyer_rfqs_and_supplier_bids(client):
 
     buyer_history = await client.get("/api/buyers/me/activity", headers=auth(buyer))
     assert buyer_history.status_code == 200
-    assert buyer_history.json()[0]["auction_id"] == rfq["reference_id"]
+    assert buyer_history.json()["items"][0]["auction_id"] == rfq["reference_id"]
 
     submitted = await bid(client, supplier, rfq["id"], "supplier-history-bid", 100)
     assert submitted.status_code == 201
     supplier_history = await client.get("/api/suppliers/me/activity", headers=auth(supplier))
     assert supplier_history.status_code == 200
-    assert supplier_history.json()[0]["auction_id"] == rfq["reference_id"]
-    assert supplier_history.json()[0]["bid_status"] == "Accepted"
-    assert supplier_history.json()[0]["amount"] == "115.00"
+    assert supplier_history.json()["items"][0]["auction_id"] == rfq["reference_id"]
+    assert supplier_history.json()["items"][0]["bid_status"] == "Accepted"
+    assert supplier_history.json()["items"][0]["amount"] == "115.00"
+
+
+@pytest.mark.anyio
+async def test_rfq_quote_filters_and_bid_pagination(client):
+    buyer = await register(client, "buyer-filter-pages", "buyer")
+    suppliers = [await register(client, f"supplier-filter-pages-{index}") for index in range(4)]
+    rfq = await create_rfq(client, buyer, remarks="Palletized freight; rear loading dock.")
+    other_rfq = await create_rfq(client, buyer, name="No notes request", remarks=None)
+    for index, token in enumerate(suppliers):
+        response = await bid(client, token, rfq["id"], f"filter-pages-key-{index}", 100 - index * 10)
+        assert response.status_code == 201
+
+    with_quotes = await client.get("/api/rfqs?has_bids=true", headers=auth(buyer))
+    assert rfq["id"] in {item["id"] for item in with_quotes.json()["items"]}
+    assert other_rfq["id"] not in {item["id"] for item in with_quotes.json()["items"]}
+    with_notes = await client.get("/api/rfqs?has_remarks=true", headers=auth(buyer))
+    assert rfq["id"] in {item["id"] for item in with_notes.json()["items"]}
+    assert other_rfq["id"] not in {item["id"] for item in with_notes.json()["items"]}
+    closing_soon = await client.get("/api/rfqs?closing_soon=true", headers=auth(buyer))
+    assert rfq["id"] in {item["id"] for item in closing_soon.json()["items"]}
+
+    first_page = await client.get(f"/api/rfqs/{rfq['id']}?bid_page=1&bid_page_size=2", headers=auth(buyer))
+    second_page = await client.get(f"/api/rfqs/{rfq['id']}?bid_page=2&bid_page_size=2", headers=auth(buyer))
+    assert first_page.status_code == second_page.status_code == 200
+    assert first_page.json()["bid_total"] == 4 and first_page.json()["bid_has_more"] is True
+    assert len(first_page.json()["bids"]) == len(second_page.json()["bids"]) == 2
+    assert {item["id"] for item in first_page.json()["bids"]}.isdisjoint({item["id"] for item in second_page.json()["bids"]})
+
+    filtered_bids = await client.get(
+        f"/api/rfqs/{rfq['id']}?leaders_only=true&top_three=true&bid_page_size=10",
+        headers=auth(buyer),
+    )
+    assert filtered_bids.json()["bid_total"] == 3
+    assert all(item["rank"] in (1, 2, 3) for item in filtered_bids.json()["bids"])
+    supplier_view = await client.get(f"/api/rfqs/{rfq['id']}?leaders_only=true", headers=auth(suppliers[-1]))
+    assert supplier_view.status_code == 200
+    assert all(item["supplier_id"] == int(supplier_view.json()["bids"][0]["supplier_id"]) for item in supplier_view.json()["bids"])
+    assert supplier_view.json()["current_lowest_bid"] is None
+
+
+@pytest.mark.anyio
+async def test_status_filters_include_expired_active_rows_and_transition_them(client):
+    buyer = await register(client, "buyer-stale-status", "buyer")
+    expired = await create_rfq(client, buyer, **schedule(-60, -30, 60))
+    forced = await create_rfq(client, buyer, name="Expired hard stop", **schedule(-120, -60, -30))
+    closed = await client.get("/api/rfqs?status=closed", headers=auth(buyer))
+    force_closed = await client.get("/api/rfqs?status=force_closed", headers=auth(buyer))
+    assert closed.status_code == force_closed.status_code == 200
+    assert next(item for item in closed.json()["items"] if item["id"] == expired["id"])["status"] == "closed"
+    assert next(item for item in force_closed.json()["items"] if item["id"] == forced["id"])["status"] == "force_closed"
+
+
+@pytest.mark.anyio
+async def test_role_scoped_analytics_and_activity_pagination(client):
+    buyer = await register(client, "buyer-analytics-pages", "buyer")
+    supplier = await register(client, "supplier-analytics-pages")
+    rfqs = [await create_rfq(client, buyer, name=f"Analytics RFQ {index}") for index in range(2)]
+    for index, rfq in enumerate(rfqs):
+        assert (await bid(client, supplier, rfq["id"], f"analytics-bid-{index}", 90 - index * 10)).status_code == 201
+
+    buyer_page = await client.get("/api/buyers/me/activity?page=1&page_size=1", headers=auth(buyer))
+    supplier_page = await client.get("/api/suppliers/me/activity?page=2&page_size=1", headers=auth(supplier))
+    general_page = await client.get("/api/auth/activity?page=1&page_size=1", headers=auth(buyer))
+    assert buyer_page.status_code == supplier_page.status_code == 200
+    assert general_page.status_code == 200 and general_page.json()["items"][0]["action"] == "Created RFQ"
+    assert buyer_page.json()["total"] == 2 and buyer_page.json()["has_more"] is True
+    assert len(buyer_page.json()["items"]) == 1
+    assert supplier_page.json()["total"] == 2 and supplier_page.json()["has_more"] is False
+    assert len(supplier_page.json()["items"]) == 1
+
+    buyer_stats = await client.get("/api/buyers/me/analytics", headers=auth(buyer))
+    supplier_stats = await client.get("/api/suppliers/me/analytics", headers=auth(supplier))
+    assert buyer_stats.status_code == supplier_stats.status_code == 200
+    assert buyer_stats.json()["rfq_total"] == 2 and buyer_stats.json()["quote_total"] == 2
+    assert supplier_stats.json()["quote_total"] == 2 and supplier_stats.json()["auctions_quoted"] == 2
+    assert supplier_stats.json()["leading_quotes"] <= supplier_stats.json()["auctions_quoted"]
+    assert (await client.get("/api/admin/analytics", headers=auth(buyer))).status_code == 403
+
+
+@pytest.mark.anyio
+async def test_admin_directory_filters_analytics_and_detail_pagination(client):
+    admin_token = await register(client, "admin-console-pages", "buyer")
+    buyer = await register(client, "buyer-admin-pages", "buyer")
+    supplier = await register(client, "supplier-admin-pages")
+    rfqs = [await create_rfq(client, buyer, name=f"Admin RFQ {index}") for index in range(2)]
+    for index, rfq in enumerate(rfqs):
+        assert (await bid(client, supplier, rfq["id"], f"admin-bid-{index}", 80 - index * 10)).status_code == 201
+    await promote_to_admin("admin-console-pages")
+    login = await client.post("/api/auth/admin/token", data={"username": "admin-console-pages", "password": "strong-password-123"})
+    assert login.status_code == 200
+    admin_token = login.json()["access_token"]
+
+    users = await client.get("/api/admin/users?role=buyer&search=buyer-admin-pages&page=1&page_size=1&has_activity=true", headers=auth(admin_token))
+    assert users.status_code == 200
+    assert users.json()["total"] == 1 and users.json()["items"][0]["username"] == "buyer-admin-pages"
+    admin_only = await client.get("/api/admin/users?admin_only=true", headers=auth(admin_token))
+    assert all(item["is_admin"] for item in admin_only.json()["items"])
+
+    buyer_detail = await client.get(f"/api/admin/buyers/{(await client.get('/api/buyers/me', headers=auth(buyer))).json()['id']}?page=2&page_size=1", headers=auth(admin_token))
+    supplier_profile = (await client.get("/api/suppliers/me", headers=auth(supplier))).json()
+    supplier_detail = await client.get(f"/api/admin/suppliers/{supplier_profile['id']}?page=2&page_size=1", headers=auth(admin_token))
+    assert buyer_detail.status_code == supplier_detail.status_code == 200
+    assert buyer_detail.json()["activity_total"] == 2 and len(buyer_detail.json()["auctions_created"]) == 1
+    assert supplier_detail.json()["activity_total"] == 2 and len(supplier_detail.json()["quotations_submitted"]) == 1
+
+    stats = await client.get("/api/admin/analytics", headers=auth(admin_token))
+    assert stats.status_code == 200
+    assert stats.json()["user_total"] >= 3 and stats.json()["rfq_total"] >= 2 and stats.json()["quote_total"] >= 2
+    dashboard = await client.get("/admin")
+    assert dashboard.status_code == 200 and "Admin overview" in dashboard.text and "Marketplace activity" in dashboard.text
+    directory = await client.get("/admin/users?role=buyer&search=buyer-admin-pages&page_size=1")
+    assert directory.status_code == 200 and "Senior admins only" in directory.text
+    auction_list = await client.get("/admin/auctions?has_bids=true&status=active&page_size=1")
+    assert auction_list.status_code == 200 and "Auction oversight" in auction_list.text
+    auction_detail = await client.get(f"/admin/auctions/{rfqs[0]['id']}?leaders_only=true&top_three=true&page_size=1")
+    assert auction_detail.status_code == 200 and "Quote ranking and history" in auction_detail.text

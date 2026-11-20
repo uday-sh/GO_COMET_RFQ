@@ -1,0 +1,11 @@
+<aside class="side-nav admin-side-nav">
+  <a class="side-brand" href="/admin"><span class="brand-mark">B</span><span>BidBolt</span></a>
+  <p class="side-label">ADMINISTRATION</p>
+  <a class="side-link {% if request.url.path == '/admin' %}active{% endif %}" href="/admin"><span>◫</span>Overview</a>
+  <a class="side-link {% if request.url.path.startswith('/admin/auctions') %}active{% endif %}" href="/admin/auctions"><span>▤</span>Auctions</a>
+  <a class="side-link {% if request.url.path.startswith('/admin/users') %}active{% endif %}" href="/admin/users"><span>♙</span>Users</a>
+  <a class="side-link" href="/"><span>↗</span>Marketplace</a>
+  <div class="side-user"><span class="avatar">{{ admin.username[:1]|upper }}</span><div><strong>{{ admin.username }}</strong><small>Senior admin</small></div></div>
+  <button id="admin-logout" class="side-link side-logout" type="button"><span>↪</span>Sign out</button>
+</aside>
+<script type="module" src="/static/js/admin.js?v=1"></script>

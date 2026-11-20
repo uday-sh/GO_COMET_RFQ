@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ title }} · BidBolt</title><link rel="icon" type="image/svg+xml" href="/static/favicon.svg"><link rel="stylesheet" href="/static/css/main.css?v=12">
+</head>
+<body class="app-page"><div class="admin-layout">
+  {% include "partials/admin_sidebar.html" %}
+  <main class="admin-main">
+    <div class="page-heading"><div><p class="eyebrow">SENIOR ADMINISTRATION</p><h1>Auction oversight</h1><p class="muted">Review every RFQ, accepted quote, and ranking across BidBolt.</p></div><span class="count-badge">{{ total }} auctions</span></div>
+    <form class="card admin-filter-form" method="get" action="/admin/auctions">
+      <label>Status<select name="status"><option value="">Any status</option><option value="active" {% if status_filter == 'active' %}selected{% endif %}>Active</option><option value="closed" {% if status_filter == 'closed' %}selected{% endif %}>Closed</option><option value="force_closed" {% if status_filter == 'force_closed' %}selected{% endif %}>Force closed</option></select></label>
+      <label>Transport mode<select name="transport_mode"><option value="">Any mode</option><option value="road" {% if transport_mode == 'road' %}selected{% endif %}>Road</option><option value="air" {% if transport_mode == 'air' %}selected{% endif %}>Air</option><option value="ocean" {% if transport_mode == 'ocean' %}selected{% endif %}>Ocean</option><option value="rail" {% if transport_mode == 'rail' %}selected{% endif %}>Rail</option><option value="multimodal" {% if transport_mode == 'multimodal' %}selected{% endif %}>Multimodal</option><option value="courier" {% if transport_mode == 'courier' %}selected{% endif %}>Courier</option></select></label>
+      <label>Service<select name="service"><option value="">Any service</option><option value="ftl" {% if service == 'ftl' %}selected{% endif %}>Full truckload</option><option value="ltl" {% if service == 'ltl' %}selected{% endif %}>Less than truckload</option><option value="reefer" {% if service == 'reefer' %}selected{% endif %}>Temperature controlled</option><option value="hazmat" {% if service == 'hazmat' %}selected{% endif %}>Hazardous goods</option><option value="express" {% if service == 'express' %}selected{% endif %}>Express</option><option value="customs" {% if service == 'customs' %}selected{% endif %}>Customs</option><option value="warehousing" {% if service == 'warehousing' %}selected{% endif %}>Warehousing</option><option value="last_mile" {% if service == 'last_mile' %}selected{% endif %}>Last mile</option></select></label>
+      <label>Rows<select name="page_size"><option value="10" {% if page_size == 10 %}selected{% endif %}>10</option><option value="20" {% if page_size == 20 %}selected{% endif %}>20</option><option value="50" {% if page_size == 50 %}selected{% endif %}>50</option></select></label>
+      <label class="tick-filter"><input type="checkbox" name="has_bids" value="true" {% if has_bids %}checked{% endif %}><span>Has accepted quotes</span></label>
+      <label class="tick-filter"><input type="checkbox" name="has_remarks" value="true" {% if has_remarks %}checked{% endif %}><span>Buyer notes included</span></label>
+      <label class="tick-filter"><input type="checkbox" name="closing_soon" value="true" {% if closing_soon %}checked{% endif %}><span>Closing in 24 hours</span></label>
+      <button class="button button-primary" type="submit">Apply filters</button><a class="button button-quiet" href="/admin/auctions">Reset</a>
+    </form>
+    <div class="card table-card"><div class="table-wrap"><table><thead><tr><th>RFQ</th><th>Route</th><th>Categories</th><th>Status</th><th>Quotes</th><th>Leading quote</th><th></th></tr></thead><tbody>
+      {% for rfq, bid_count, lowest_bid in rows %}{% set effective_status = display_status.get(rfq.id, rfq.status) %}<tr><td><strong>{{ rfq.reference_id }}</strong><br><span class="muted">{{ rfq.name }}</span></td><td>{{ rfq.origin }} → {{ rfq.destination }}</td><td>{% for item in rfq.transport_modes %}<span class="category-chip mode-chip">{{ item.mode|title }}</span>{% endfor %}{% for item in rfq.services %}<span class="category-chip service-chip">{{ item.service|replace('_', ' ')|title }}</span>{% endfor %}</td><td><span class="status status-{{ effective_status }}">{{ effective_status|replace('_', ' ')|title }}</span></td><td>{{ bid_count }}</td><td>{{ lowest_bid if lowest_bid is not none else '—' }}</td><td><a href="/admin/auctions/{{ rfq.id }}">Review →</a></td></tr>{% else %}<tr><td colspan="7">No auctions match these filters.</td></tr>{% endfor %}
+    </tbody></table></div></div>
+    <nav class="pagination-bar" aria-label="Auction pages"><span>Page {{ page }} · {{ total }} auctions</span><div>{% if page > 1 %}<a class="button button-quiet" href="{{ previous_url }}">← Previous</a>{% else %}<button class="button button-quiet" disabled>← Previous</button>{% endif %}{% if page * page_size < total %}<a class="button button-quiet" href="{{ next_url }}">Next →</a>{% else %}<button class="button button-quiet" disabled>Next →</button>{% endif %}</div></nav>
+  </main>
+</div></body></html>

@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ title }} · BidBolt</title><link rel="icon" type="image/svg+xml" href="/static/favicon.svg"><link rel="stylesheet" href="/static/css/main.css?v=12">
+</head>
+<body class="app-page"><div class="admin-layout">
+  {% include "partials/admin_sidebar.html" %}
+  <main class="admin-main">
+    <p class="eyebrow">AUCTION OVERSIGHT</p><div class="page-heading"><div><h1>{{ rfq.reference_id }}</h1><p class="muted">{{ rfq.name }} · {{ rfq.origin }} → {{ rfq.destination }}</p></div><a class="button button-quiet" href="/admin/auctions">← All auctions</a></div>
+    <section class="card admin-rfq-summary"><div><span>Status</span><strong class="status status-{{ effective_status }}">{{ effective_status|replace('_', ' ')|title }}</strong></div><div><span>Pickup date</span><strong>{{ rfq.pickup_service_date.strftime('%b %d, %Y') }}</strong></div><div><span>Current close</span><strong>{{ rfq.current_close_at.strftime('%b %d, %Y · %I:%M %p') }}</strong></div><div><span>Buyer ID</span><strong>#{{ rfq.buyer_id }}</strong></div></section>
+    {% if rfq.remarks %}<section class="card admin-rfq-remarks"><p class="eyebrow">BUYER NOTES</p><p>{{ rfq.remarks }}</p></section>{% endif %}
+    <section class="card admin-activity-card"><div class="chart-heading"><div><p class="eyebrow">BID FILTERS</p><h2>Quote ranking and history</h2></div><span class="count-badge">{{ total }} quotes</span></div>
+      <form class="bid-filter-ticks admin-bid-filters" method="get" action="/admin/auctions/{{ rfq.id }}">
+        <label class="match-option"><input type="checkbox" name="leaders_only" value="true" {% if leaders_only %}checked{% endif %}><span>Current best quote per supplier</span></label>
+        <label class="match-option"><input type="checkbox" name="top_three" value="true" {% if top_three %}checked{% endif %}><span>Top three ranks only</span></label>
+        <label>Rows<select name="page_size"><option value="10" {% if page_size == 10 %}selected{% endif %}>10</option><option value="20" {% if page_size == 20 %}selected{% endif %}>20</option><option value="50" {% if page_size == 50 %}selected{% endif %}>50</option></select></label>
+        <button class="button button-primary" type="submit">Apply filters</button><a class="button button-quiet" href="/admin/auctions/{{ rfq.id }}">Reset</a>
+      </form>
+      <div class="table-wrap"><table><thead><tr><th>Rank</th><th>Supplier</th><th>Carrier</th><th>Freight</th><th>Origin</th><th>Destination</th><th>Total</th><th>Transit</th><th>Submitted</th></tr></thead><tbody>
+        {% for bid in bids %}<tr><td class="rank">{% if ranks.get(bid.id) %}L{{ ranks.get(bid.id) }}{% else %}—{% endif %}</td><td>{{ bid.supplier.username }}<br><span class="muted">{{ bid.supplier.email }}</span></td><td>{{ bid.carrier_name }}</td><td>{{ bid.freight_charges }}</td><td>{{ bid.origin_charges }}</td><td>{{ bid.destination_charges }}</td><td><strong>{{ bid.comparison_total }}</strong></td><td>{{ bid.transit_time_hours }}h</td><td>{{ bid.submitted_at.strftime('%b %d, %Y · %I:%M %p') }}</td></tr>{% else %}<tr><td colspan="9">No quotes match the selected filters.</td></tr>{% endfor %}
+      </tbody></table></div>
+      <nav class="pagination-bar" aria-label="Quote pages"><span>Page {{ page }} · {{ total }} quotes</span><div>{% if page > 1 %}<a class="button button-quiet" href="{{ previous_url }}">← Previous</a>{% else %}<button class="button button-quiet" disabled>← Previous</button>{% endif %}{% if page * page_size < total %}<a class="button button-quiet" href="{{ next_url }}">Next →</a>{% else %}<button class="button button-quiet" disabled>Next →</button>{% endif %}</div></nav>
+    </section>
+  </main>
+</div></body></html>

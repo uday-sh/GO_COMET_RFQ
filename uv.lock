@@ -347,7 +347,7 @@ wheels = [
 ]
 
 [[package]]
-name = "freightflow-rfq"
+name = "bidbolt-rfq"
 version = "1.0.0"
 source = { virtual = "." }
 dependencies = [

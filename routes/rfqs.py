@@ -4,14 +4,15 @@ import secrets
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, select
+from sqlalchemy import exists, false, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 import models
 from auth import CurrentUser, require_role
 from database import get_db
-from schemas import ActivityResponse, BidCreate, BidResponse, ExtensionResponse, PaginatedRFQs, RFQCreate, RFQDetail, RFQSummary
+from schemas import ActivityResponse, BidCreate, BidResponse, ExtensionResponse, FreightService, PaginatedRFQs, RFQCreate, RFQDetail, RFQStatus, RFQSummary, TransportMode
+from services.rfq_filters import current_status_filter, effective_status_value
 
 router = APIRouter(prefix="/rfqs", tags=["rfqs"])
 
@@ -35,11 +36,7 @@ async def sync_status(rfq: models.RFQ, now: datetime, db: AsyncSession) -> None:
     rfq.bid_start_at = as_utc(rfq.bid_start_at)
     rfq.current_close_at = as_utc(rfq.current_close_at)
     rfq.forced_close_at = as_utc(rfq.forced_close_at)
-    new_status = rfq.status
-    if rfq.status == "active" and now >= rfq.forced_close_at:
-        new_status = "force_closed"
-    elif rfq.status == "active" and now >= rfq.current_close_at:
-        new_status = "closed"
+    new_status = effective_status_value(rfq.status, rfq.current_close_at, rfq.forced_close_at, now)
     if new_status != rfq.status:
         rfq.status = new_status
         db.add(models.AuctionActivity(rfq_id=rfq.id, event_type="status_changed", message=f"Auction is now {new_status.replace('_', ' ').title()}"))
@@ -69,6 +66,11 @@ def summary_from(rfq: models.RFQ, lowest: Decimal | None) -> RFQSummary:
         id=rfq.id,
         reference_id=rfq.reference_id,
         name=rfq.name,
+        origin=rfq.origin,
+        destination=rfq.destination,
+        pickup_service_date=rfq.pickup_service_date,
+        transport_modes=[item.mode for item in rfq.transport_modes],
+        services=[item.service for item in rfq.services],
         current_lowest_bid=lowest,
         bid_start_at=as_utc(rfq.bid_start_at),
         current_close_at=as_utc(rfq.current_close_at),
@@ -105,6 +107,8 @@ async def create_rfq(payload: RFQCreate, current_user: Annotated[models.User, De
             reference_id=f"NEW-{secrets.token_hex(8)}",
             name=payload.name.strip(),
             remarks=payload.remarks.strip() or None if payload.remarks else None,
+            origin=payload.origin,
+            destination=payload.destination,
             buyer_id=buyer_id,
             bid_start_at=payload.bid_start_at.astimezone(UTC),
             initial_close_at=payload.initial_close_at.astimezone(UTC),
@@ -115,6 +119,8 @@ async def create_rfq(payload: RFQCreate, current_user: Annotated[models.User, De
             extension_duration_minutes=payload.extension_duration_minutes,
             trigger_mode=payload.trigger_mode.value,
             status="active",
+            transport_modes=[models.RFQTransportMode(mode=mode.value) for mode in payload.transport_modes],
+            services=[models.RFQService(service=service.value) for service in payload.services],
         )
         db.add(rfq)
         await db.flush()
@@ -132,15 +138,74 @@ async def list_rfqs(
     db: Annotated[AsyncSession, Depends(get_db)],
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=100)] = 20,
+    transport_mode: TransportMode | None = None,
+    service: FreightService | None = None,
+    origin: Annotated[str | None, Query(min_length=1, max_length=160)] = None,
+    destination: Annotated[str | None, Query(min_length=1, max_length=160)] = None,
+    pickup_from: date | None = None,
+    pickup_to: date | None = None,
+    rfq_status: RFQStatus | None = Query(default=None, alias="status"),
+    matching_only: bool = False,
+    has_bids: bool = False,
+    has_remarks: bool = False,
+    closing_soon: bool = False,
 ):
     viewer_role = current_user.role
     viewer_id = current_user.id
+    filter_now = datetime.now(UTC)
     await db.rollback()
     rfq_filter = select(models.RFQ)
     count_filter = select(func.count()).select_from(models.RFQ)
+    filters = []
     if viewer_role == "buyer":
-        rfq_filter = rfq_filter.where(models.RFQ.buyer_id == viewer_id)
-        count_filter = count_filter.where(models.RFQ.buyer_id == viewer_id)
+        filters.append(models.RFQ.buyer_id == viewer_id)
+    if transport_mode:
+        filters.append(models.RFQ.id.in_(select(models.RFQTransportMode.rfq_id).where(models.RFQTransportMode.mode == transport_mode.value)))
+    if service:
+        filters.append(models.RFQ.id.in_(select(models.RFQService.rfq_id).where(models.RFQService.service == service.value)))
+    if origin:
+        filters.append(models.RFQ.origin.ilike(f"%{origin.strip()}%"))
+    if destination:
+        filters.append(models.RFQ.destination.ilike(f"%{destination.strip()}%"))
+    if pickup_from and pickup_to and pickup_from > pickup_to:
+        raise HTTPException(status_code=422, detail="pickup_from must be on or before pickup_to")
+    if pickup_from:
+        filters.append(models.RFQ.pickup_service_date >= pickup_from)
+    if pickup_to:
+        filters.append(models.RFQ.pickup_service_date <= pickup_to)
+    if rfq_status:
+        filters.append(current_status_filter(rfq_status, filter_now))
+    if has_bids:
+        filters.append(exists(select(models.Bid.id).where(models.Bid.rfq_id == models.RFQ.id, models.Bid.accepted.is_(True))))
+    if has_remarks:
+        filters.append(models.RFQ.remarks.is_not(None))
+    if closing_soon:
+        filters.extend((
+            models.RFQ.status == "active",
+            models.RFQ.current_close_at >= filter_now,
+            models.RFQ.current_close_at <= filter_now + timedelta(hours=24),
+        ))
+    if matching_only:
+        if viewer_role != "supplier":
+            raise HTTPException(status_code=403, detail="Capability matching is available to suppliers only")
+        supplier_modes = list((await db.scalars(select(models.SupplierTransportMode.mode).where(models.SupplierTransportMode.supplier_id == viewer_id))).all())
+        supplier_services = list((await db.scalars(select(models.SupplierService.service).where(models.SupplierService.supplier_id == viewer_id))).all())
+        if not supplier_modes:
+            filters.append(false())
+        else:
+            unsupported_modes = select(models.RFQTransportMode.rfq_id).where(
+                models.RFQTransportMode.rfq_id == models.RFQ.id,
+                models.RFQTransportMode.mode.not_in(supplier_modes),
+            )
+            filters.append(~exists(unsupported_modes))
+            unsupported_services = select(models.RFQService.rfq_id).where(
+                models.RFQService.rfq_id == models.RFQ.id,
+                models.RFQService.service.not_in(supplier_services),
+            )
+            filters.append(~exists(unsupported_services))
+    if filters:
+        rfq_filter = rfq_filter.where(*filters)
+        count_filter = count_filter.where(*filters)
     total = await db.scalar(count_filter) or 0
     start = (page - 1) * page_size
     rows = (
@@ -164,12 +229,23 @@ async def list_rfqs(
             .group_by(models.Bid.rfq_id)
         )
         lowest_by_rfq = {rfq_id: lowest for rfq_id, lowest in lowest_rows.all()}
-    items = [summary_from(rfq, lowest_by_rfq.get(rfq.id)) for rfq in rows]
+    # Supplier accounts must not receive competitors' prices in marketplace cards.
+    items = [summary_from(rfq, None if viewer_role == "supplier" else lowest_by_rfq.get(rfq.id)) for rfq in rows]
     return PaginatedRFQs(items=items, total=total, page=page, page_size=page_size, has_more=start + len(items) < total)
 
 
 @router.get("/{rfq_id}", response_model=RFQDetail)
-async def get_rfq(rfq_id: int, current_user: CurrentUser, db: Annotated[AsyncSession, Depends(get_db)], bid_limit: Annotated[int, Query(ge=1, le=200)] = 100, activity_limit: Annotated[int, Query(ge=1, le=200)] = 100):
+async def get_rfq(
+    rfq_id: int,
+    current_user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    bid_page: Annotated[int, Query(ge=1)] = 1,
+    bid_page_size: Annotated[int, Query(ge=1, le=100)] = 20,
+    bid_limit: Annotated[int | None, Query(ge=1, le=200)] = None,
+    activity_limit: Annotated[int, Query(ge=1, le=200)] = 100,
+    leaders_only: bool = False,
+    top_three: bool = False,
+):
     viewer_role = current_user.role
     viewer_id = current_user.id
     await db.rollback()
@@ -183,29 +259,44 @@ async def get_rfq(rfq_id: int, current_user: CurrentUser, db: Annotated[AsyncSes
     if rfq.status != "active":
         await db.commit()
     ranking = await ranking_snapshot(db, rfq.id)
+    best = await best_bids(db, rfq.id)
     bid_query = select(models.Bid).where(models.Bid.rfq_id == rfq.id, models.Bid.accepted.is_(True))
     if viewer_role == "supplier":
         # Scope the supplier's own history before limiting, otherwise a page of
         # lower-priced competitors could crowd out this supplier's own quote.
         bid_query = bid_query.where(models.Bid.supplier_id == viewer_id)
+    if leaders_only:
+        bid_query = bid_query.where(models.Bid.id.in_([bid.id for bid in best]))
+    if top_three:
+        leading_ids = [bid.id for bid in best if ranking.get(bid.supplier_id, 999) <= 3]
+        bid_query = bid_query.where(models.Bid.id.in_(leading_ids))
+    effective_page_size = bid_limit or bid_page_size
+    bid_total = await db.scalar(select(func.count()).select_from(bid_query.order_by(None).subquery())) or 0
+    bid_offset = (bid_page - 1) * effective_page_size
     all_bids = (
         await db.execute(
             bid_query
             .options(selectinload(models.Bid.supplier))
             .order_by(models.Bid.comparison_total, models.Bid.submitted_at, models.Bid.id)
-            .limit(bid_limit)
+            .offset(bid_offset)
+            .limit(effective_page_size)
         )
     ).scalars().all()
-    best = await best_bids(db, rfq.id)
     activities = sorted(rfq.activities, key=lambda activity: activity.created_at, reverse=True)[:activity_limit]
     return RFQDetail(
-        **summary_from(rfq, best[0].comparison_total if best else None).model_dump(),
+        **summary_from(
+            rfq,
+            best[0].comparison_total if best and viewer_role != "supplier" else None,
+        ).model_dump(),
         initial_close_at=rfq.initial_close_at,
         remarks=rfq.remarks,
-        pickup_service_date=rfq.pickup_service_date,
         trigger_window_minutes=rfq.trigger_window_minutes,
         extension_duration_minutes=rfq.extension_duration_minutes,
         bids=[bid_response(bid, ranking.get(bid.supplier_id) if bid.id in {item.id for item in best} else None) for bid in all_bids],
+        bid_total=bid_total,
+        bid_page=bid_page,
+        bid_page_size=effective_page_size,
+        bid_has_more=bid_offset + len(all_bids) < bid_total,
         extensions=[ExtensionResponse.model_validate(extension) for extension in sorted(rfq.extensions, key=lambda item: item.triggered_at, reverse=True)],
         activities=[ActivityResponse.model_validate(activity) for activity in activities],
     )

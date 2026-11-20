@@ -1,4 +1,4 @@
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -6,12 +6,13 @@ import models
 from schemas import AccountActivityItem, BuyerActivityItem, SupplierActivityItem
 
 
-async def get_buyer_activity(db: AsyncSession, user_id: int, limit: int = 50) -> list[BuyerActivityItem]:
+async def get_buyer_activity(db: AsyncSession, user_id: int, limit: int = 50, offset: int = 0) -> list[BuyerActivityItem]:
     rows = (
         await db.execute(
             select(models.RFQ)
             .where(models.RFQ.buyer_id == user_id)
             .order_by(models.RFQ.created_at.desc(), models.RFQ.id.desc())
+            .offset(offset)
             .limit(limit)
         )
     ).scalars().all()
@@ -27,13 +28,14 @@ async def get_buyer_activity(db: AsyncSession, user_id: int, limit: int = 50) ->
     ]
 
 
-async def get_supplier_activity(db: AsyncSession, user_id: int, limit: int = 50) -> list[SupplierActivityItem]:
+async def get_supplier_activity(db: AsyncSession, user_id: int, limit: int = 50, offset: int = 0) -> list[SupplierActivityItem]:
     rows = (
         await db.execute(
             select(models.Bid)
             .where(models.Bid.supplier_id == user_id)
             .options(selectinload(models.Bid.rfq))
             .order_by(models.Bid.submitted_at.desc(), models.Bid.id.desc())
+            .offset(offset)
             .limit(limit)
         )
     ).scalars().all()
@@ -51,7 +53,15 @@ async def get_supplier_activity(db: AsyncSession, user_id: int, limit: int = 50)
     ]
 
 
-async def get_account_activity(db: AsyncSession, user_id: int, role: str, limit: int = 50) -> list[AccountActivityItem]:
+async def count_account_activity(db: AsyncSession, user_id: int, role: str) -> int:
+    if role == "buyer":
+        count = await db.scalar(select(func.count()).select_from(models.RFQ).where(models.RFQ.buyer_id == user_id))
+    else:
+        count = await db.scalar(select(func.count()).select_from(models.Bid).where(models.Bid.supplier_id == user_id))
+    return count or 0
+
+
+async def get_account_activity(db: AsyncSession, user_id: int, role: str, limit: int = 50, offset: int = 0) -> list[AccountActivityItem]:
     if role == "buyer":
         return [
             AccountActivityItem(
@@ -62,7 +72,7 @@ async def get_account_activity(db: AsyncSession, user_id: int, role: str, limit:
                 status=item.status,
                 occurred_at=item.created_at,
             )
-            for item in await get_buyer_activity(db, user_id, limit)
+            for item in await get_buyer_activity(db, user_id, limit, offset)
         ]
 
     return [
@@ -75,5 +85,5 @@ async def get_account_activity(db: AsyncSession, user_id: int, role: str, limit:
             amount=item.amount,
             occurred_at=item.submitted_at,
         )
-        for item in await get_supplier_activity(db, user_id, limit)
+        for item in await get_supplier_activity(db, user_id, limit, offset)
     ]
