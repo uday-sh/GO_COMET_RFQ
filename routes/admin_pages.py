@@ -44,11 +44,14 @@ async def admin_users_page(
     db: Annotated[AsyncSession, Depends(get_db)],
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=100)] = 25,
-    role: str | None = Query(default=None, pattern="^(buyer|supplier)$"),
+    role: str | None = Query(default=None, max_length=20),
     search: str | None = Query(default=None, max_length=120),
     admin_only: bool = False,
     has_activity: bool = False,
 ):
+    role = (role.strip().lower() or None) if role is not None else None
+    if role is not None and role not in {"buyer", "supplier"}:
+        raise HTTPException(status_code=422, detail="Choose buyer, supplier, or all account types.")
     filters = []
     if role:
         filters.append(models.User.role == role)

@@ -18,7 +18,6 @@ class Settings(BaseSettings):
     frontend_url: str = "http://localhost:8000"
     cors_origins: str = "http://localhost:8000"
     page_size: int = 20
-    rate_limit_per_minute: int = 120
 
     @property
     def cors_origin_list(self) -> list[str]:

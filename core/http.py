@@ -1,17 +1,35 @@
-from collections import defaultdict, deque
-from time import monotonic
-
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.templating import Jinja2Templates
 
-from config import settings
-
 templates = Jinja2Templates(directory="templates")
-rate_buckets: dict[str, deque[float]] = defaultdict(deque)
 
 
 def install_http_behavior(app: FastAPI) -> None:
+    @app.exception_handler(RequestValidationError)
+    async def render_validation_error(request: Request, exc: RequestValidationError):
+        if request.url.path.startswith("/api/"):
+            return JSONResponse(
+                {
+                    "detail": [
+                        {key: error[key] for key in ("loc", "msg", "type") if key in error}
+                        for error in exc.errors()
+                    ]
+                },
+                status_code=422,
+            )
+        return templates.TemplateResponse(
+            request,
+            "access_error.html",
+            {
+                "title": "Check your filters",
+                "message": "One or more values in this request are invalid. Update them and try again.",
+                "status_code": 422,
+            },
+            status_code=422,
+        )
+
     @app.exception_handler(HTTPException)
     async def render_http_error(request: Request, exc: HTTPException):
         if request.url.path.startswith("/api/"):
@@ -32,22 +50,23 @@ def install_http_behavior(app: FastAPI) -> None:
             headers=exc.headers,
         )
 
+    @app.exception_handler(Exception)
+    async def render_unexpected_error(request: Request, _exc: Exception):
+        if request.url.path.startswith("/api/"):
+            return JSONResponse({"detail": "An unexpected error occurred."}, status_code=500)
+        return templates.TemplateResponse(
+            request,
+            "access_error.html",
+            {
+                "title": "Something went wrong",
+                "message": "We couldn’t complete this page. Please try again.",
+                "status_code": 500,
+            },
+            status_code=500,
+        )
+
     @app.middleware("http")
     async def security_headers(request: Request, call_next):
-        limited_paths = {
-            "/api/auth/token",
-            "/api/auth/admin/token",
-            "/api/auth/register",
-        }
-        if request.method == "POST" and (request.url.path in limited_paths or request.url.path.endswith("/bids")):
-            key = f"{request.client.host if request.client else 'unknown'}:{request.url.path}"
-            bucket = rate_buckets[key]
-            now = monotonic()
-            while bucket and now - bucket[0] >= 60:
-                bucket.popleft()
-            if len(bucket) >= settings.rate_limit_per_minute:
-                return JSONResponse({"detail": "Too many requests; retry shortly"}, status_code=429, headers={"Retry-After": "60"})
-            bucket.append(now)
         response = await call_next(request)
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["X-Content-Type-Options"] = "nosniff"

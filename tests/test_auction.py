@@ -403,6 +403,31 @@ async def test_admin_directory_filters_analytics_and_detail_pagination(client):
     assert dashboard.status_code == 200 and "Admin overview" in dashboard.text and "Marketplace activity" in dashboard.text
     directory = await client.get("/admin/users?role=buyer&search=buyer-admin-pages&page_size=1")
     assert directory.status_code == 200 and "Senior admins only" in directory.text
+    search_results = await client.get(
+        "/admin/users?search=supplier-admin-pages&role=&page_size=10&has_activity=true"
+    )
+    assert search_results.status_code == 200
+    assert search_results.headers["content-type"].startswith("text/html")
+    assert "supplier-admin-pages" in search_results.text
+    assert f"/admin/users/{supplier_profile['id']}" in search_results.text
+    user_activity = await client.get(f"/admin/users/{supplier_profile['id']}?page=1&page_size=10")
+    assert user_activity.status_code == 200
+    assert user_activity.headers["content-type"].startswith("text/html")
+    assert "Submitted quotation" in user_activity.text and "Admin RFQ 0" in user_activity.text
+    bad_browser_filter = await client.get("/admin/users?page=0")
+    assert bad_browser_filter.status_code == 422
+    assert bad_browser_filter.headers["content-type"].startswith("text/html")
+    assert "Check your filters" in bad_browser_filter.text
+    bad_role_browser = await client.get("/admin/users?role=carrier")
+    assert bad_role_browser.status_code == 422
+    assert bad_role_browser.headers["content-type"].startswith("text/html")
+    assert "Choose buyer, supplier, or all account types" in bad_role_browser.text
+    blank_role_api = await client.get("/api/admin/users?role=", headers=auth(admin_token))
+    assert blank_role_api.status_code == 200
+    invalid_api = await client.get("/api/admin/users?page=0", headers=auth(admin_token))
+    assert invalid_api.status_code == 422
+    assert invalid_api.headers["content-type"].startswith("application/json")
+    assert "input" not in invalid_api.json()["detail"][0]
     auction_list = await client.get("/admin/auctions?has_bids=true&status=active&page_size=1")
     assert auction_list.status_code == 200 and "Auction oversight" in auction_list.text
     auction_detail = await client.get(f"/admin/auctions/{rfqs[0]['id']}?leaders_only=true&top_three=true&page_size=1")

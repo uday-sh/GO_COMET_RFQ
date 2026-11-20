@@ -7,7 +7,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import models
-from auth import CurrentUser, create_access_token, hash_password, verify_password
+from auth import CurrentUser, create_access_token, hash_password, revoke_access_token, verify_password
 from config import settings
 from database import get_db
 from schemas import ActivityPage, Token, UserCreate, UserPublic
@@ -61,7 +61,7 @@ async def login(form_data: Annotated[OAuth2PasswordRequestForm, Depends()], requ
         raise HTTPException(status_code=401, detail="Incorrect email or password", headers={"WWW-Authenticate": "Bearer"})
     if user.is_admin:
         raise HTTPException(status_code=403, detail="Use the administrator sign-in option")
-    access_token = create_access_token(user.id)
+    access_token = await create_access_token(user.id, db)
     attach_session_cookie(request, response, access_token)
     return Token(access_token=access_token, token_type="bearer")
 
@@ -81,13 +81,21 @@ async def admin_login(
     )
     if not user or not verify_password(form_data.password, user.password_hash) or not user.is_admin:
         raise HTTPException(status_code=401, detail="Invalid administrator username or password", headers={"WWW-Authenticate": "Bearer"})
-    access_token = create_access_token(user.id)
+    access_token = await create_access_token(user.id, db)
     attach_session_cookie(request, response, access_token)
     return Token(access_token=access_token, token_type="bearer")
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
-async def logout(response: Response):
+async def logout(
+    request: Request,
+    response: Response,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    authorization = request.headers.get("authorization", "")
+    token = authorization[7:].strip() if authorization.lower().startswith("bearer ") else request.cookies.get("rfq_session")
+    if token:
+        await revoke_access_token(token, db)
     response.delete_cookie("rfq_session", path="/")
 
 

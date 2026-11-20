@@ -8,16 +8,20 @@ The application is a modular monolith. `main.py` only creates the FastAPI app; `
 
 ```mermaid
 flowchart LR
-  Browser[BidBolt UI: Jinja + JavaScript] --> API[FastAPI app]
-  API --> Routes[routes/ endpoint modules]
+  Browser[BidBolt UI: Jinja + JavaScript] --> Nginx[Nginx round-robin proxy]
+  Nginx --> App1[Stateless FastAPI replica 1]
+  Nginx --> App2[Stateless FastAPI replica 2]
+  App1 --> Routes[routes/ endpoint modules]
+  App2 --> Routes
   Routes --> Identity[Authentication and account APIs]
   Routes --> Auctions[RFQ and auction workflows]
-  Auctions --> DB[(PostgreSQL / SQLite dev DB)]
+  Identity --> DB[(Shared PostgreSQL: users, sessions, RFQs, quotes)]
+  Auctions --> DB
   Auctions --> Audit[Bid, extension, and activity ledger]
   Auctions -. future committed events .-> Notify[Optional notification service]
 ```
 
-The database is the source of truth. A bid transaction locks the RFQ row where the database supports row locks, checks the database/server deadline, validates a strictly lower supplier quote, recalculates rankings, applies the configured extension if eligible, and writes audit records before commit. `idempotency_key` is unique per supplier/RFQ so safe client retries do not create duplicate submissions.
+The database is the source of truth, including active login sessions. Both FastAPI replicas use the same signing key and PostgreSQL session table; no sticky sessions are needed, and logout revokes a session across both replicas. A bid transaction locks the RFQ row where the database supports row locks, checks the database/server deadline, validates a strictly lower supplier quote, recalculates rankings, applies the configured extension if eligible, and writes audit records before commit. `idempotency_key` is unique per supplier/RFQ so safe client retries do not create duplicate submissions.
 
 ## Freight categories and marketplace filters
 
@@ -65,17 +69,35 @@ The OpenAPI docs group role-specific account APIs under **Buyers**, **Suppliers*
 ## Docker
 
 ```powershell
-# Set SECRET_KEY in .env before starting; Compose refuses its known-default fallback.
+# Copy .env.example to .env, then set SECRET_KEY and POSTGRES_PASSWORD.
 docker compose up --build
 ```
 
-PostgreSQL data is persisted in the `postgres_data` volume. The container runs `alembic upgrade head` before starting FastAPI, runs as a non-root user, does not bake secrets into the image, and exposes `/health`.
+Open http://localhost:8000. Nginx is the only public container; its default upstream policy distributes requests round-robin between `app1` and `app2`. The app containers have no published host ports and hold no user/session state. PostgreSQL persists the marketplace data and revocable login sessions in the `postgres_data` volume. Compose runs migrations once before either app replica starts. The application image runs as a non-root user, and `.dockerignore` excludes local secrets, databases, and virtual environments.
 
-### Free-tier deployment notes (checked 2026-11-20)
+For a public HTTPS deployment, point a DNS A record at the VM and set `HTTP_PORT=80`, `HTTPS_PORT=443`, and `CORS_ORIGINS=https://your-domain` in `.env`. First start the stack with HTTP so the ACME challenge can complete, then request a Let's Encrypt certificate and switch Nginx to the TLS config:
 
-For a demo or evaluation deployment, run the Docker image as a Render Free Web Service and point `DATABASE_URL` at a separate managed PostgreSQL provider. Render Free Web Services sleep after 15 minutes without inbound traffic, have an ephemeral filesystem, and may take about a minute to wake; therefore do not put the authoritative auction database on local SQLite in that environment. Render's own Free Postgres is limited to 1 GB, expires after 30 days, and has no backups, so it is not the durable choice for this database. See [Render's free deployment limits](https://render.com/docs/free).
+```powershell
+docker compose up -d --build
+docker compose --profile tls run --rm certbot certonly --webroot --webroot-path=/var/www/certbot --cert-name bidbolt --email you@example.com --agree-tos --no-eff-email -d your-domain.example
+docker compose -f docker-compose.yml -f docker-compose.tls.yml up -d nginx
+```
 
-Supabase Free is a practical PostgreSQL option for a small demo: the current published limits include 500 MB database size, 5 GB egress, two free projects, and pausing after one week of inactivity; automatic backups are not included. Treat it as evaluation infrastructure, keep the database URL in host secrets, and plan backups/upgrades before production use. See [Supabase billing limits](https://supabase.com/docs/guides/platform/billing-on-supabase) and [database size behavior](https://supabase.com/docs/guides/platform/database-size).
+Schedule certificate renewal on the VM (for example, twice daily) with `docker compose --profile tls run --rm certbot renew --webroot --webroot-path=/var/www/certbot`, followed by `docker compose -f docker-compose.yml -f docker-compose.tls.yml exec nginx nginx -s reload`.
+
+Generate the two secrets with URL-safe hexadecimal values before editing `.env` (the database password is embedded in the connection URL):
+
+```powershell
+python -c "import secrets; print('SECRET_KEY=' + secrets.token_urlsafe(48)); print('POSTGRES_PASSWORD=' + secrets.token_hex(32))"
+```
+
+For a new Oracle Cloud VM, choose an Always Free Ampere A1 shape and Ubuntu image, allow inbound TCP ports 80 and 443 in both the OCI network security list and the VM firewall, then install Docker Engine and the Compose plugin using [Docker's official Ubuntu instructions](https://docs.docker.com/engine/install/ubuntu/). Clone the repository on the VM, create `.env` from `.env.example`, set `HTTP_PORT=80`, `HTTPS_PORT=443`, the generated secrets, and your HTTPS origin, then run the commands above. Do not add port 8000 or PostgreSQL port 5432 to the public ingress rules.
+
+### Free-tier deployment target
+
+The Compose topology is sized for an Oracle Cloud Always Free Ampere VM with up to 2 OCPUs and 12 GB of memory. This runs two application containers on one VM; it gives request-level balancing between app processes, but the VM, Nginx, and PostgreSQL remain a single host failure point. Oracle requires payment-card verification for signup, free capacity can vary by region, and Oracle may reclaim compute it considers idle. See [Oracle Always Free resources](https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier_topic-Always_Free_Resources.htm) and [Oracle Free Tier terms and limits](https://www.oracle.com/cloud/free/).
+
+Render Free cannot run this exact topology: a free web service is limited to one instance, and free Key Value data is in-memory and lost when the service restarts. Render web services also sleep after 15 minutes without inbound traffic. See [Render's free service limits](https://render.com/docs/free) and [instance scaling limits](https://render.com/docs/scaling). Keep regular database backups; the free VM volume is not a substitute for a backup plan.
 
 ## Tests
 

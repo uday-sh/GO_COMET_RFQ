@@ -13,10 +13,11 @@ from routes import admin_api, admin_pages, auth_api, buyers_api, rfqs, suppliers
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    # Keep local SQLite startup convenient. Deployments apply Alembic migrations
-    # before serving traffic; create_all only fills missing local tables.
-    async with engine.begin() as connection:
-        await connection.run_sync(Base.metadata.create_all)
+    # Local SQLite startup stays convenient. Production schema changes run once
+    # through the Compose migration job before either replica serves traffic.
+    if settings.database_url.startswith("sqlite"):
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.create_all)
     yield
     await engine.dispose()
 
