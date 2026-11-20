@@ -139,7 +139,7 @@ sequenceDiagram
     participant D as Shared PostgreSQL
     U->>N: Sign in
     N->>A: Forward request (or B on next request)
-    A->>D: Verify password; create user_sessions row
+    A->>D: Verify password and create user_sessions row
     A-->>U: Signed JWT (sid) + HttpOnly cookie
     U->>N: Protected request with token
     N->>B: Forward to another replica
